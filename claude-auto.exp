@@ -1,0 +1,19 @@
+#!/usr/bin/expect -f
+
+# This script wraps the 'claude' CLI and automatically sends "y" whenever it sees a permission prompt.
+
+# Disable timeout so the script doesn't exit when idle
+set timeout -1
+
+# Spawn the original claude CLI, passing any arguments you provide (e.g. claude-yes -p "my prompt")
+spawn claude {*}$argv
+
+# Start the interactive session
+interact {
+    # -o tells expect to match against the OUTPUT of claude, not your input
+    -o
+    # Match specifically "Do you want to proceed?", ignoring case
+    -re "(?i)Do you want to proceed\\\?" {
+        send "y\r"
+    }
+}
