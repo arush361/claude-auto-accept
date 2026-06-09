@@ -14,6 +14,10 @@ interact {
     -o
     # Match specifically "Do you want to proceed?", ignoring case
     -re "(?i)Do you want to proceed\\\?" {
-        send "y\r"
+        # The prompt is an interactive menu, not a text input.
+        # We sleep for a tiny fraction to allow the menu to finish rendering, 
+        # then simply press Enter (\r) to select the default "1. Yes"
+        sleep 0.2
+        send "\r"
     }
 }
