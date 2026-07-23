@@ -24,7 +24,7 @@ interact {
     # Match the whole permission menu, anchored on its final "N. No" line so that
     # by the time the pattern fires, any "don't ask again" option has already
     # streamed in and is included in $interact_out(buffer).
-    -re "(?i)Do you want to proceed\\\?.*\n\\s*[0-9]+\\. No" {
+    -re {(?i)Do you want to proceed\?.*\n\s*[0-9]+\. No} {
         sleep 0.2
         # Some prompts offer a middle option, "Yes, and don't ask again for: ...".
         # When present, prefer it so the permission is whitelisted going forward.
