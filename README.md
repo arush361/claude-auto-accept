@@ -61,9 +61,13 @@ If that happens, you can easily open the `claude-auto.exp` file in any text edit
 
 ```tcl
     # Just change the phrase below to whatever the new prompt is!
-    -re "(?i)Do you want to proceed\\\?" {
+    -re "(?i)Do you want to proceed\\\?.*\n\\s*[0-9]+\\. No" {
         sleep 0.2
-        send "\r"
+        if {[string match "*don't ask again*" $interact_out(buffer)]} {
+            send "2\r"
+        } else {
+            send "\r"
+        }
     }
 ```
 

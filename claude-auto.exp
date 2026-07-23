@@ -21,12 +21,18 @@ trap {
 interact {
     # -o tells expect to match against the OUTPUT of claude, not your input
     -o
-    # Match specifically "Do you want to proceed?", ignoring case
-    -re "(?i)Do you want to proceed\\\?" {
-        # The prompt is an interactive menu, not a text input.
-        # We sleep for a tiny fraction to allow the menu to finish rendering, 
-        # then simply press Enter (\r) to select the default "1. Yes"
+    # Match the whole permission menu, anchored on its final "N. No" line so that
+    # by the time the pattern fires, any "don't ask again" option has already
+    # streamed in and is included in $interact_out(buffer).
+    -re "(?i)Do you want to proceed\\\?.*\n\\s*[0-9]+\\. No" {
         sleep 0.2
-        send "\r"
+        # Some prompts offer a middle option, "Yes, and don't ask again for: ...".
+        # When present, prefer it so the permission is whitelisted going forward.
+        # Otherwise (plain "1. Yes" / "2. No"), fall back to the default "1. Yes".
+        if {[string match "*don't ask again*" $interact_out(buffer)]} {
+            send "2\r"
+        } else {
+            send "\r"
+        }
     }
 }
