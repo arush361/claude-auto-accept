@@ -8,12 +8,6 @@ set timeout -1
 # Spawn the original claude CLI, passing any arguments you provide (e.g. claude-yes -p "my prompt")
 spawn claude {*}$argv
 
-# TEMPORARY DIAGNOSTIC LOGGING: mirrors every byte claude sends to a file so
-# a real prompt-rendering failure can be inspected with actual bytes instead
-# of guessing from what's visible on screen. Remove this once the
-# screenshot-approval issue is root-caused.
-log_file -a $env(HOME)/claude-auto-debug.log
-
 # Sync the spawned pty's dimensions to the controlling terminal's current size.
 # Without this, claude renders its TUI using the pty's default/stale size until
 # something (e.g. a manual window resize) forces it to redraw, which can hide
@@ -41,20 +35,39 @@ trap { sync_pty_size } WINCH
 interact {
     # -o tells expect to match against the OUTPUT of claude, not your input
     -o
-    # Match the whole permission menu, anchored on its final "N. No" line so that
-    # by the time the pattern fires, any "don't ask again" option has already
-    # streamed in and is included in $interact_out(buffer). The prefix before the
-    # option number accepts plain whitespace or a "❯" cursor marker, in case the
-    # menu defaults its highlight to the "No" option instead of "Yes".
-    -re {(?i)Do you want to proceed\?.*\n[^\n0-9]*[0-9]+\. No} {
-        sleep 0.2
+    # Trigger on the prompt header alone. Claude's full-screen TUI renders the
+    # options below it (and often words within the same sentence) using
+    # per-word cursor-positioning and color-reset escape codes rather than
+    # plain contiguous text or literal "\n" bytes - e.g. the option line is
+    # actually "2. " + ESC[39m + "No", not "2. No" - so a literal multi-word
+    # match against the full menu is unreliable. This short header phrase was
+    # confirmed to render intact in captured real sessions.
+    -re {(?i)Do you want to proceed\?} {
+        # Give the rest of the menu (options, and any "don't ask again"
+        # variant) time to stream in before deciding how to respond.
+        sleep 0.3
+        # Strip ANSI escape codes before the substring check below, so a
+        # color/cursor code landing inside or next to a word can't hide it.
+        regsub -all {\x1b\[[0-9;?]*[a-zA-Z]} $interact_out(buffer) {} cleaned
         # Some prompts offer a middle option, "Yes, and don't ask again for: ...".
         # When present, prefer it so the permission is whitelisted going forward.
         # Otherwise (plain "1. Yes" / "2. No"), fall back to the default "1. Yes".
-        if {[string match "*don't ask again*" $interact_out(buffer)]} {
+        if {[string match "*don't ask again*" $cleaned]} {
             send "2\r"
         } else {
             send "\r"
         }
+    }
+    # The one-time "workspace trust" prompt shown for a new/untrusted directory
+    # uses completely different wording ("Enter to confirm · Esc to cancel", not
+    # "Do you want to proceed?") and renders most of its text with a cursor-jump
+    # escape code between every word (position depends on terminal width), so
+    # multi-word phrases can't be matched literally. "Accessing" and "workspace"
+    # are the two words in its header, close enough together to bridge with a
+    # bounded wildcard regardless of width. The cursor already defaults to
+    # "1. Yes, I trust this folder", so a plain Enter accepts it.
+    -re {(?i)Accessing.{0,40}workspace} {
+        sleep 0.2
+        send "\r"
     }
 }
