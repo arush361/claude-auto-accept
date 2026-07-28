@@ -31,6 +31,24 @@ proc sync_pty_size {} {
 sync_pty_size
 trap { sync_pty_size } WINCH
 
+# claude enables mouse-tracking modes on the terminal (so menu options can be
+# clicked) and is expected to disable them again before it exits. If it exits
+# abnormally and skips that cleanup, the real terminal is left reporting every
+# mouse movement as literal escape-code text (e.g. "35;26;12M...") straight
+# into the next shell prompt. Send the matching "disable" sequences ourselves
+# so this can't happen regardless of how claude exits, including if this
+# wrapper itself is killed via SIGHUP/SIGTERM (e.g. closing the terminal tab).
+proc disable_mouse_tracking {} {
+    # Swallow failures: if stdout/the user spawn id is already gone by the
+    # time this runs (e.g. a non-interactive invocation), there's no terminal
+    # left to clean up anyway.
+    catch {
+        send_user "\x1b\[?1000l\x1b\[?1002l\x1b\[?1003l\x1b\[?1006l"
+    }
+}
+trap { disable_mouse_tracking; exit } SIGHUP
+trap { disable_mouse_tracking; exit } SIGTERM
+
 # Start the interactive session
 interact {
     # -o tells expect to match against the OUTPUT of claude, not your input
@@ -71,3 +89,5 @@ interact {
         send "\r"
     }
 }
+
+disable_mouse_tracking
