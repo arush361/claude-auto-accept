@@ -60,21 +60,18 @@ interact {
     # actually "2. " + ESC[39m + "No", not "2. No" - so a literal multi-word
     # match against the full menu is unreliable. This short header phrase was
     # confirmed to render intact in captured real sessions.
+    #
+    # This used to also inspect $interact_out(buffer) to prefer a middle
+    # "don't ask again" option when offered. That variable does not exist on
+    # this Expect version - interact never populates a "buffer" element the
+    # way plain expect does with expect_out(buffer) - so every match crashed
+    # the whole interact call with an uncaught Tcl error. Since that meant
+    # the feature had a 100% failure rate (it crashed on every single
+    # permission prompt, not just some), it's removed rather than patched:
+    # always accept the default "1. Yes".
     -re {(?i)Do you want to proceed\?} {
-        # Give the rest of the menu (options, and any "don't ask again"
-        # variant) time to stream in before deciding how to respond.
-        sleep 0.3
-        # Strip ANSI escape codes before the substring check below, so a
-        # color/cursor code landing inside or next to a word can't hide it.
-        regsub -all {\x1b\[[0-9;?]*[a-zA-Z]} $interact_out(buffer) {} cleaned
-        # Some prompts offer a middle option, "Yes, and don't ask again for: ...".
-        # When present, prefer it so the permission is whitelisted going forward.
-        # Otherwise (plain "1. Yes" / "2. No"), fall back to the default "1. Yes".
-        if {[string match "*don't ask again*" $cleaned]} {
-            send "2\r"
-        } else {
-            send "\r"
-        }
+        sleep 0.2
+        send "\r"
     }
     # The one-time "workspace trust" prompt shown for a new/untrusted directory
     # uses completely different wording ("Enter to confirm · Esc to cancel", not
