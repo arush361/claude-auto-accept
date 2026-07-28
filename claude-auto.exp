@@ -8,14 +8,28 @@ set timeout -1
 # Spawn the original claude CLI, passing any arguments you provide (e.g. claude-yes -p "my prompt")
 spawn claude {*}$argv
 
-# Propagate terminal resize events to the spawned pty.
-# Without this, claude keeps using the terminal size it started with,
-# so resizing the window scrambles its TUI rendering.
-trap {
-    set rows [stty rows]
-    set cols [stty columns]
-    stty rows $rows columns $cols < $spawn_out(slave,name)
-} WINCH
+# Sync the spawned pty's dimensions to the controlling terminal's current size.
+# Without this, claude renders its TUI using the pty's default/stale size until
+# something (e.g. a manual window resize) forces it to redraw, which can hide
+# or scramble menus like the permission prompt below.
+proc sync_pty_size {} {
+    global spawn_out
+    # Swallow failures: if there's no real controlling terminal to read a size
+    # from (e.g. a non-interactive invocation), just leave the pty at its
+    # default size instead of crashing the wrapper.
+    catch {
+        set rows [stty rows]
+        set cols [stty columns]
+        if {$rows > 0 && $cols > 0} {
+            stty rows $rows columns $cols < $spawn_out(slave,name)
+        }
+    }
+}
+
+# Apply once immediately so claude starts with the correct size from its very
+# first frame, then keep re-applying on every subsequent resize (SIGWINCH).
+sync_pty_size
+trap { sync_pty_size } WINCH
 
 # Start the interactive session
 interact {
@@ -23,8 +37,10 @@ interact {
     -o
     # Match the whole permission menu, anchored on its final "N. No" line so that
     # by the time the pattern fires, any "don't ask again" option has already
-    # streamed in and is included in $interact_out(buffer).
-    -re {(?i)Do you want to proceed\?.*\n\s*[0-9]+\. No} {
+    # streamed in and is included in $interact_out(buffer). The prefix before the
+    # option number accepts plain whitespace or a "❯" cursor marker, in case the
+    # menu defaults its highlight to the "No" option instead of "Yes".
+    -re {(?i)Do you want to proceed\?.*\n[^\n0-9]*[0-9]+\. No} {
         sleep 0.2
         # Some prompts offer a middle option, "Yes, and don't ask again for: ...".
         # When present, prefer it so the permission is whitelisted going forward.
