@@ -8,6 +8,13 @@ set timeout -1
 # Spawn the original claude CLI, passing any arguments you provide (e.g. claude-yes -p "my prompt")
 spawn claude {*}$argv
 
+# Expect's internal match buffer defaults to 2000 bytes, which is easily
+# exceeded by an inline image preview (e.g. an attached screenshot) sitting
+# between a prompt's header and its Yes/No menu. Raise it so the permission
+# regex below can still see across large previews instead of losing the
+# earlier "Do you want to proceed?" text out of its matching window.
+match_max 100000
+
 # Sync the spawned pty's dimensions to the controlling terminal's current size.
 # Without this, claude renders its TUI using the pty's default/stale size until
 # something (e.g. a manual window resize) forces it to redraw, which can hide
